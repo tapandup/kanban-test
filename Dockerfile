@@ -1,29 +1,32 @@
-# Use Node.js 20 as the base image
+# Imagen base
 FROM node:20-alpine AS base
-
-# Set the working directory
 WORKDIR /app
 
-# Install dependencies
-COPY package.json package-lock.json ./
-RUN npm install --frozen-lockfile
+# Dependencia del sistema para Prisma (openssl)
+RUN apk add --no-cache openssl
 
-# Copy the rest of the application
+# Copiar manifiestos (lockfile opcional)
+# Esto copia package.json y, si existe, package-lock.json
+COPY package.json package-lock.json* ./
+
+# Instalar dependencias
+# (npm ci requiere lockfile; usamos npm install para que funcione con o sin lock)
+RUN npm install
+
+# Copiar el resto del código
 COPY . .
 
-# Build the application
+# (opcional) Generar Prisma client; tu script "build" ya lo hace,
+# pero esto acelera un poco el build en algunas imágenes
+RUN npx prisma generate
+
+# Build de producción (tu script hace generate + migrate deploy + build)
 RUN npm run build
 
-# Production image
-FROM node:20-alpine AS production
-
-WORKDIR /app
-
-# Copy only the necessary files from the build stage
-COPY --from=base /app .
-
-# Expose the port
+# Variables por defecto y puerto
+ENV HOST=0.0.0.0
+ENV PORT=3000
 EXPOSE 3000
 
-# Start the application
-CMD ["npm", "run", "start"]
+# Arranque
+CMD ["npm","start"]
