@@ -1,35 +1,43 @@
-# -------- Deps --------
-FROM node:20-alpine AS deps
-WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl
-COPY package*.json ./
-# usa npm ci si tienes package-lock.json, si no npm i
-RUN npm ci --omit=dev || npm install --omit=dev
-
-# -------- Build --------
+# ========= build =========
 FROM node:20-alpine AS builder
 WORKDIR /app
-RUN apk add --no-cache openssl
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-# genera Prisma (no necesita la BD)
-RUN npx prisma generate
-RUN npm run build
 
-# -------- Runtime --------
+# Necesario para Prisma en Alpine
+RUN apk add --no-cache openssl
+
+# Instala deps sin exigir lock
+COPY package*.json ./
+RUN npm install
+
+# Prisma: copiar schema y generar cliente
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Copiar el resto del código
+COPY . .
+
+# Variables por defecto para build (ajusta si usas otro path)
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL="file:./dev.db"
+
+# En lugar de migrate deploy (que requiere migraciones), empuja el schema
+RUN npx prisma db push --accept-data-loss && npm run build
+
+# ========= runtime =========
 FROM node:20-alpine AS runner
 WORKDIR /app
 RUN apk add --no-cache openssl
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOST=0.0.0.0
 
-# copia lo mínimo para correr
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3000
+
+# Traer lo necesario del build
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/package.json ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 
-# Ejecuta migraciones al iniciar y luego levanta Next
-CMD sh -c "npm run migrate && npm run start"
+EXPOSE 3000
+CMD ["npm","start"]
