@@ -2,13 +2,12 @@
   "name": "kanban-team-app",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev -p 3000 -H 0.0.0.0",
-    "build": "prisma generate && next build",       // ← sin migrate aquí
-    "migrate": "prisma migrate deploy",             // ← migraciones aparte
-    "start": "next start -p 3000 -H 0.0.0.0",
-    "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
-  }
+"scripts": {
+  "dev": "next dev -p 3000 -H 0.0.0.0",
+  "build": "prisma generate && prisma db push && next build",
+  "start": "next start -p 3000 -H 0.0.0.0",
+  "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
+}
   "dependencies": {
     "@prisma/client": "^5.0.0",
     "next": "14.0.0",
