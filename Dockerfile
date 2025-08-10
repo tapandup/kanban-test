@@ -1,43 +1,54 @@
-# ========= build =========
+# -----------------------------
+# Etapa 1: deps (instala node_modules)
+# -----------------------------
+FROM node:20-alpine AS deps
+WORKDIR /app
+# Prisma en Alpine necesita openssl y compatibilidad glibc
+RUN apk add --no-cache libc6-compat openssl
+# Copiamos SOLO los manifests para aprovechar la cache
+COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
+# Si hay package-lock -> npm ci; si no, npm install
+RUN if [ -f package-lock.json ]; then \
+      npm ci --legacy-peer-deps; \
+    else \
+      npm install --legacy-peer-deps; \
+    fi
+
+# -----------------------------
+# Etapa 2: builder (build de la app)
+# -----------------------------
 FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Necesario para Prisma en Alpine
 RUN apk add --no-cache openssl
-
-# Instala deps sin exigir lock
-COPY package*.json ./
-RUN npm install
-
-# Prisma: copiar schema y generar cliente
-COPY prisma ./prisma
-RUN npx prisma generate
-
-# Copiar el resto del código
-COPY . .
-
-# Variables por defecto para build (ajusta si usas otro path)
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL="file:./dev.db"
+# Trae node_modules ya resueltos
+COPY --from=deps /app/node_modules ./node_modules
+# Trae TODO el código
+COPY . .
+# Genera el cliente de Prisma y compila Next
+RUN npx prisma generate
+RUN npm run build
 
-# En lugar de migrate deploy (que requiere migraciones), empuja el schema
-RUN npx prisma db push --accept-data-loss && npm run build
-
-# ========= runtime =========
+# -----------------------------
+# Etapa 3: runner (runtime)
+# -----------------------------
 FROM node:20-alpine AS runner
 WORKDIR /app
-RUN apk add --no-cache openssl
-
-ENV NODE_ENV=production
-ENV HOST=0.0.0.0
-ENV PORT=3000
-
-# Traer lo necesario del build
+RUN apk add --no-cache openssl && \
+    addgroup -S nodejs && adduser -S nextjs -G nodejs
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=3000 \
+    NEXT_TELEMETRY_DISABLED=1 \
+    DATABASE_URL="file:/data/dev.db"
+# Copiamos lo mínimo para ejecutar
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/prisma ./prisma
-
+# Donde vivirá tu sqlite para que sea persistente
+VOLUME /data
 EXPOSE 3000
-CMD ["npm","start"]
+# Migra/Pusha el schema en arranque y levanta Next
+CMD ["sh", "-c", "npx prisma db push && npm run start"]
