@@ -62,7 +62,8 @@ model Task {
   dueDate        DateTime?
 
   // SQLite no soporta String[] -> usamos JSON opcional
-  tags           Json?
+  // Guardamos el array como string JSON
+  tags String? @default("[]")
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
