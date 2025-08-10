@@ -8,12 +8,16 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String
-  role      String   @default("member")
-  createdAt DateTime @default(now())
-  projects  Project[]
+  id               Int        @id @default(autoincrement())
+  email            String     @unique
+  name             String
+  role             String     @default("member")
+  createdAt        DateTime   @default(now())
+
+  // Relaciones
+  projects         Project[]      // inverso de Project.owner
+  assignedTasks    Task[]         // inverso de Task.assignee
+  authoredComments Comment[]      // inverso de Comment.author
 }
 
 model Project {
@@ -22,6 +26,7 @@ model Project {
   description String
   ownerId     Int
   createdAt   DateTime @default(now())
+
   owner       User     @relation(fields: [ownerId], references: [id])
   boards      Board[]
 }
@@ -30,6 +35,7 @@ model Board {
   id        Int      @id @default(autoincrement())
   projectId Int
   name      String
+
   project   Project  @relation(fields: [projectId], references: [id])
   columns   Column[]
 }
@@ -39,25 +45,30 @@ model Column {
   boardId Int
   name    String
   order   Int
+
   board   Board    @relation(fields: [boardId], references: [id])
   tasks   Task[]
 }
 
 model Task {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   columnId       Int
   title          String
-  description    String
+  description    String?
   status         String
   priority       String
   estimatePoints Int?
   assigneeId     Int?
   dueDate        DateTime?
-  tags           String[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  column         Column   @relation(fields: [columnId], references: [id])
-  assignee       User?    @relation(fields: [assigneeId], references: [id])
+
+  // SQLite no soporta String[] -> usamos JSON opcional
+  tags           Json?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  column         Column    @relation(fields: [columnId], references: [id])
+  assignee       User?     @relation(fields: [assigneeId], references: [id])
   comments       Comment[]
 }
 
@@ -67,6 +78,7 @@ model Comment {
   authorId  Int
   content   String
   createdAt DateTime @default(now())
+
   task      Task     @relation(fields: [taskId], references: [id])
   author    User     @relation(fields: [authorId], references: [id])
 }
